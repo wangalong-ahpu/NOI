@@ -1119,11 +1119,7 @@ TreeNode* findParent(Tree& t,TreeNode* p){
 } 
 ```
 
-树采用先序构造，大家可以自己画一下。
-
 > [完整代码](./代码/02/树的孩子兄弟表示法.cpp)
->
-> http://t.csdnimg.cn/Ea86n
 
 #### 3、特殊树
 
@@ -1256,6 +1252,259 @@ ll ask(int pos)//返回区间pos到1的总和
 > [P3374 【模板】树状数组 1 - 洛谷 | 计算机科学教育新生态 (luogu.com.cn)](https://www.luogu.com.cn/problem/P3374)
 >
 > [P3368 【模板】树状数组 2 - 洛谷 | 计算机科学教育新生态 (luogu.com.cn)](https://www.luogu.com.cn/problem/P3368)
+
+##### 线段树
+
+线段树（Segment Tree）几乎是算法竞赛最常用的数据结构了，它主要用于维护**区间信息**（要求满足结合律）。与树状数组相比，它可以实现 O(log⁡n) 的区间修改，还可以同时支持**多种操作**（加、乘），更具通用性。
+
+###### 线段树的建立
+
+线段树是一棵**平衡二叉树**。母结点代表整个区间的和，越往下区间越小。注意，线段树的每个**节点**都对应一条**线段（区间）**，但并不保证所有的线段（区间）都是线段树的节点，这两者应当区分开。
+
+如果有一个数组[1,2,3,4,5]，那么它对应的线段树大概长这个样子：
+
+<img src=".assets/image-20250524221800492.png" alt="image-20250524221800492" style="zoom:50%;" />
+
+每个节点 p 的左右子节点的编号分别为 2p 和 2p+1 ，假如节点 p 储存区间 [a,b] 的和，设 mid=⌊l+r2⌋ ，那么两个子节点分别储存 [l, mid] 和 [mid+1,r] 的和。可以发现，左节点对应的区间长度，与右节点相同或者比之恰好多1。
+
+如何从数组建立一棵线段树？我们可以考虑**递归**地进行。
+
+```c++
+void build(ll l = 1, ll r = n, ll p = 1)
+{
+    if (l == r) // 到达叶子节点
+        tree[p] = A[l]; // 用数组中的数据赋值
+    else
+    {
+        ll mid = (l + r) / 2;
+        build(l, mid, p * 2); // 先建立左右子节点
+        build(mid + 1, r, p * 2 + 1);
+        tree[p] = tree[p * 2] + tree[p * 2 + 1]; // 该节点的值等于左右子节点之和
+    }
+}
+```
+
+###### 区间修改
+
+在讲区间修改前，要先引入一个“**懒标记**”（或延迟标记）的概念。懒标记是线段树的精髓所在。对于区间修改，朴素的想法是用**递归**的方式一层层修改（类似于线段树的建立），但这样的时间复杂度比较高。使用懒标记后，对于那些正好是线段树节点的区间，我们不继续递归下去，而是打上一个**标记**，将来要用到它的**子区间**的时候，再向下**传递**。
+
+```c++
+void update(ll l, ll r, ll d, ll p = 1, ll cl = 1, ll cr = n)
+{
+    if (cl > r || cr < l) // 区间无交集
+        return; // 剪枝
+    else if (cl >= l && cr <= r) // 当前节点对应的区间包含在目标区间中
+    {
+        tree[p] += (cr - cl + 1) * d; // 更新当前区间的值
+        if (cr > cl) // 如果不是叶子节点
+            mark[p] += d; // 给当前区间打上标记
+    }
+    else // 与目标区间有交集，但不包含于其中
+    {
+        ll mid = (cl + cr) / 2;
+        mark[p * 2] += mark[p]; // 标记向下传递
+        mark[p * 2 + 1] += mark[p];
+        tree[p * 2] += mark[p] * (mid - cl + 1); // 往下更新一层
+        tree[p * 2 + 1] += mark[p] * (cr - mid);
+        mark[p] = 0; // 清除标记
+        update(l, r, d, p * 2, cl, mid); // 递归地往下寻找
+        update(l, r, d, p * 2 + 1, mid + 1, cr);
+        tree[p] = tree[p * 2] + tree[p * 2 + 1]; // 根据子节点更新当前节点的值
+    }
+}
+```
+
+更新时，我们是从最大的区间开始，递归向下处理。注意到，**任何区间都是线段树上某些节点的并集**。于是我们记目标区间为 [l,r] ，当前区间为 [cl,cr] ， 当前节点为 p ，我们会遇到三种情况：
+
+1. 当前区间与目标区间没有交集：
+
+<img src=".assets/v2-794f7124f288eeae7661200d948f43a4_1440w.jpg" alt="img" style="zoom:50%;" />
+
+这时直接结束递归。
+
+2. 当前区间被包括在目标区间里：
+
+<img src=".assets/v2-abebb05b5e4c44821e7325c6e6b623fe_1440w-17480977215712.jpg" alt="img" style="zoom:50%;" />
+
+这时可以更新当前区间，别忘了乘上区间长度：
+
+```cpp
+tree[p] += (cr - cl + 1) * d;
+```
+
+然后打上懒标记（叶子节点可以不打标记，因为不会再向下传递了）：
+
+```cpp
+ mark[p] += d;
+```
+
+这个标记表示“该区间上每一个点都要加上d”。因为原来可能存在标记，所以是+=而不是=。
+
+3. 当前区间与目标区间相交，但不包含于其中：
+
+<img src=".assets/v2-10c7ce5904b8300109f51e290ff2c14a_1440w.jpg" alt="img" style="zoom:50%;" />
+
+这时把当前区间一分为二，分别进行处理。如果存在懒标记，要先把懒标记传递给子节点（注意也是+=，因为原来可能存在懒标记）：
+
+```cpp
+ll mid = (cl + cr) / 2;
+mark[p * 2] += mark[p];
+mark[p * 2 + 1] += mark[p];
+```
+
+两个子节点的值也就需要相应的更新（后面乘的是区间长度）：
+
+```cpp
+tree[p * 2] += mark[p] * (mid - cl + 1);
+tree[p * 2 + 1] += mark[p] * (cr - mid);
+```
+
+不要忘记清除该节点的懒标记：
+
+```cpp
+mark[p] = 0;
+```
+
+这个过程并不是递归的，我们只往下传递一层（所以叫“懒”标记啊！），以后要用再才继续传递。其实我们常常把这个传递过程封装成一个函数：
+
+```cpp
+inline void push_down(ll p, ll len)
+{
+    mark[p * 2] += mark[p];
+    mark[p * 2 + 1] += mark[p];
+    tree[p * 2] += mark[p] * (len - len / 2);
+    tree[p * 2 + 1] += mark[p] * (len / 2); // 右边的区间可能要短一点
+    mark[p] = 0;
+}
+```
+
+然后在update函数中这样调用：
+
+```cpp
+push_down(p, cr - cl + 1);
+```
+
+传递完标记后，再递归地去处理左右两个子节点。
+
+<img src=".assets/v2-77ed3d65f505555fe291c12322550157_1440w.jpg" alt="img" style="zoom:50%;" />
+
+###### 区间查询
+
+有了区间修改的经验，区间查询的方法完全类似，直接上代码了：
+
+```cpp
+ll query(ll l, ll r, ll p = 1, ll cl = 1, ll cr = n)
+{
+    if (cl > r || cr < l)
+        return 0;
+    else if (cl >= l && cr <= r)
+        return tree[p];
+    else
+    {
+        ll mid = (cl + cr) / 2;
+        push_down(p, cr - cl + 1);
+        return query(l, r, p * 2, cl, mid) + query(l, r, p * 2 + 1, mid + 1, cr); 
+        // 上一行拆成三行写就和区间修改格式一致了
+    }
+}
+```
+
+一样的递归，一样自顶至底地寻找，一样的合并信息。
+
+###### 完整代码
+
+```c++
+#include <bits/stdc++.h>
+#define MAXN 100005
+using namespace std;
+typedef long long ll;
+inline ll read()
+{
+    ll ans = 0;
+    char c = getchar();
+    while (!isdigit(c))
+        c = getchar();
+    while (isdigit(c))
+    {
+        ans = ans * 10 + c - '0';
+        c = getchar();
+    }
+    return ans;
+}
+ll n, m, A[MAXN], tree[MAXN * 4], mark[MAXN * 4]; // 经验表明开四倍空间不会越界
+inline void push_down(ll p, ll len)
+{
+    mark[p * 2] += mark[p];
+    mark[p * 2 + 1] += mark[p];
+    tree[p * 2] += mark[p] * (len - len / 2);
+    tree[p * 2 + 1] += mark[p] * (len / 2);
+    mark[p] = 0;
+}
+void build(ll l = 1, ll r = n, ll p = 1)
+{
+    if (l == r)
+        tree[p] = A[l];
+    else
+    {
+        ll mid = (l + r) / 2;
+        build(l, mid, p * 2);
+        build(mid + 1, r, p * 2 + 1);
+        tree[p] = tree[p * 2] + tree[p * 2 + 1];
+    }
+}
+void update(ll l, ll r, ll d, ll p = 1, ll cl = 1, ll cr = n)
+{
+    if (cl > r || cr < l)
+        return;
+    else if (cl >= l && cr <= r)
+    {
+        tree[p] += (cr - cl + 1) * d;
+        if (cr > cl)
+            mark[p] += d;
+    }
+    else
+    {
+        ll mid = (cl + cr) / 2;
+        push_down(p, cr - cl + 1);
+        update(l, r, d, p * 2, cl, mid);
+        update(l, r, d, p * 2 + 1, mid + 1, cr);
+        tree[p] = tree[p * 2] + tree[p * 2 + 1];
+    }
+}
+ll query(ll l, ll r, ll p = 1, ll cl = 1, ll cr = n)
+{
+    if (cl > r || cr < l)
+        return 0;
+    else if (cl >= l && cr <= r)
+        return tree[p];
+    else
+    {
+        ll mid = (cl + cr) / 2;
+        push_down(p, cr - cl + 1);
+        return query(l, r, p * 2, cl, mid) + query(l, r, p * 2 + 1, mid + 1, cr);
+    }
+}
+int main()
+{
+    n = read();
+    m = read();
+    for (int i = 1; i <= n; ++i)
+        A[i] = read();
+    build();
+    for (int i = 0; i < m; ++i)
+    {
+        ll opr = read(), l = read(), r = read();
+        if (opr == 1)
+        {
+            ll d = read();
+            update(l, r, d);
+        }
+        else
+            printf("%lld\n", query(l, r));
+    }
+    return 0;
+}
+```
 
 ##### 笛卡尔树
 
@@ -3453,7 +3702,7 @@ $φ(n)$的计算方法并不复杂，但是为了得到最后那个公式，需�
 
 比如，1323的欧拉函数，计算过程如下：
 
-$φ(1323)=φ(33×72)=1323\times(1−\frac1{3})(1−\frac1{7})=756$
+$φ(1323)=φ(3^3×7^2)=1323\times(1−\frac1{3})(1−\frac1{7})=756$
 
 **代码实现**
 
@@ -3959,7 +4208,7 @@ $$
 
 $ans=C_{k+m-1}^{k-1}$
 
-###### **证明** 
+###### 证明 
 
 题目所求就是满足 $\sum_{i=1}^k x_i=m$的多重集 $\{x_1\cdot a_1,x_2\cdot a_2,...,x_k\cdot a_k\} $的数量，换句话说，就是就是要给每个$x_i$赋值 $[0,m]$中的任意整数，且所有$x_i$的和为$m$  
 
@@ -4197,7 +4446,7 @@ $$
 
 ###### 路径计数问题
 
-**非将路径条数**
+**非降路径条数**
 
 <img src=".assets/2e4a529b637287f3942c05b34f7d29df.png#pic_center" alt="在这里插入图片描述" style="zoom:50%;" />
 
